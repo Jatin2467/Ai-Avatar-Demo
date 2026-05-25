@@ -1,6 +1,6 @@
 import { Environment, OrbitControls } from "@react-three/drei";
 import { Canvas, useFrame } from "@react-three/fiber";
-import { motion } from "framer-motion";
+import { AnimatePresence, motion } from "framer-motion";
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { FormEvent } from "react";
 import * as THREE from "three";
@@ -14,10 +14,10 @@ import { useAvatarSpeechRecognition } from "./hooks/useAvatarSpeechRecognition";
 import { useAvatarSpeechSynthesis } from "./hooks/useAvatarSpeechSynthesis";
 import { useTypedText } from "./hooks/useTypedText";
 
-const signalBars = [42, 68, 90, 58, 76, 48, 84];
 
 type AvatarProps = {
   isSpeaking: boolean;
+  onLoaded: () => void;
 };
 
 type BoneRestPose = {
@@ -65,7 +65,7 @@ function poseRelaxedArms(vrm: VRM) {
   }
 }
 
-function Avatar({ isSpeaking }: AvatarProps) {
+function Avatar({ isSpeaking, onLoaded }: AvatarProps) {
   const groupRef = useRef<THREE.Group>(null);
   const vrmRef = useRef<VRM | null>(null);
   const headRef = useRef<THREE.Object3D | null>(null);
@@ -102,6 +102,7 @@ function Avatar({ isSpeaking }: AvatarProps) {
       poseRelaxedArms(vrm);
       vrmScene.rotation.y = Math.PI;
       avatarGroup.add(vrmScene);
+      onLoaded();
     });
 
     return () => {
@@ -158,10 +159,10 @@ function Avatar({ isSpeaking }: AvatarProps) {
       const mouthPulse =
         speaking
           ? THREE.MathUtils.clamp(
-              0.22 + Math.sin(elapsed * 13) * 0.18 + Math.sin(elapsed * 21.7) * 0.1,
-              0.04,
-              0.58,
-            )
+            0.22 + Math.sin(elapsed * 13) * 0.18 + Math.sin(elapsed * 21.7) * 0.1,
+            0.04,
+            0.58,
+          )
           : 0;
 
       vrm.expressionManager.setValue("aa", mouthPulse);
@@ -180,6 +181,7 @@ export default function App() {
   const chat = useAvatarChat();
   const voice = useAvatarSpeechSynthesis();
   const [typedQuestion, setTypedQuestion] = useState("");
+  const [isAvatarLoaded, setIsAvatarLoaded] = useState(false);
   const lastSubmittedTranscriptRef = useRef("");
   const wasListeningRef = useRef(false);
   const { speak } = voice;
@@ -335,21 +337,6 @@ export default function App() {
               <h2>Real-time presence</h2>
             </div>
             <div className="stage-actions">
-              <div className={`voice-wave ${voice.isSpeaking ? "voice-wave-active" : ""}`} aria-hidden="true">
-                {signalBars.map((height, index) => (
-                  <motion.span
-                    key={`${height}-${index}`}
-                    style={{ height: `${height}%` }}
-                    animate={{ scaleY: voice.isSpeaking ? [0.45, 1, 0.55] : [0.35, 0.62, 0.4] }}
-                    transition={{
-                      duration: voice.isSpeaking ? 0.72 : 1.25,
-                      delay: index * 0.08,
-                      repeat: Infinity,
-                      ease: "easeInOut",
-                    }}
-                  />
-                ))}
-              </div>
 
               <motion.button
                 className="top-mic-button"
@@ -383,10 +370,40 @@ export default function App() {
           </div>
 
           <div className="canvas-wrap">
+            <AnimatePresence>
+              {!isAvatarLoaded && (
+                <motion.div
+                  className="avatar-loader-overlay"
+                  initial={{ opacity: 1 }}
+                  exit={{ opacity: 0 }}
+                  transition={{ duration: 0.6, ease: "easeInOut" }}
+                >
+                  <div className="loader-ring-wrapper">
+                    <div className="loader-ring loader-ring-outer" />
+                    <div className="loader-ring loader-ring-middle" />
+                    <div className="loader-ring loader-ring-inner" />
+                    <div className="loader-center-glow" />
+                  </div>
+                  <div className="loader-text-container">
+                    <h3 className="loader-title">Synthesizing Presence</h3>
+                    <p className="loader-subtitle">Configuring neural avatar engine...</p>
+                  </div>
+                  <div className="loader-progress-bar">
+                    <motion.div
+                      className="loader-progress-fill"
+                      initial={{ width: "0%" }}
+                      animate={{ width: "100%" }}
+                      transition={{ duration: 2.8, ease: "easeInOut", repeat: Infinity }}
+                    />
+                  </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
+
             <Canvas camera={{ position: [0, 1.12, 1.75], fov: 27 }}>
               <ambientLight intensity={1.35} />
               <directionalLight position={[2, 3, 2]} intensity={1.4} />
-              <Avatar isSpeaking={voice.isSpeaking} />
+              <Avatar isSpeaking={voice.isSpeaking} onLoaded={() => setIsAvatarLoaded(true)} />
               <Environment preset="city" />
               <OrbitControls enablePan={false} target={[0, 0.78, 0]} minDistance={1.25} maxDistance={2.5} />
             </Canvas>
